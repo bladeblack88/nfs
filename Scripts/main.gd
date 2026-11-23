@@ -21,6 +21,12 @@ var police_cars: Array[Node3D] = []
 var heat_seconds := 0.0
 var wanted_level := 0
 var mission_finished := false
+var nitro_fuel := 100.0
+var nitro_active := false
+var career_cash := 2500
+var collision_cooldown := 0.0
+var nitro_label: Label
+var cash_label: Label
 var car_paint: StandardMaterial3D
 
 func _ready() -> void:
@@ -35,7 +41,14 @@ func _physics_process(delta: float) -> void:
     if car == null:
         return
     if throttle_input > 0.0:
-        speed = move_toward(speed, MAX_SPEED, ACCELERATION * delta)
+        var boost := 1.0
+        if nitro_active and nitro_fuel > 0.0:
+            boost = 1.65
+            nitro_fuel = maxf(0.0, nitro_fuel - 30.0 * delta)
+        else:
+            nitro_active = false
+            nitro_fuel = minf(100.0, nitro_fuel + 7.0 * delta)
+        speed = move_toward(speed, MAX_SPEED * boost, ACCELERATION * boost * delta)
     elif throttle_input < 0.0:
         speed = move_toward(speed, -MAX_SPEED * 0.35, ACCELERATION * delta)
     else:
@@ -53,6 +66,9 @@ func _physics_process(delta: float) -> void:
     _update_traffic(delta)
     _update_police(delta)
     _update_heat_and_mission(delta)
+    _check_traffic_collisions(delta)
+    if collision_cooldown > 0.0:
+        collision_cooldown = maxf(0.0, collision_cooldown - delta)
 
     if speed_label:
         speed_label.text = "%03d KM/H" % int(round(absf(speed) * 3.6))
@@ -176,11 +192,25 @@ func _build_hud() -> void:
     heat_label.position = Vector2(24, 62)
     root.add_child(heat_label)
 
+    nitro_label = Label.new()
+    nitro_label.text = "NITRO: 100%"
+    nitro_label.add_theme_font_size_override("font_size", 20)
+    nitro_label.add_theme_color_override("font_color", Color(0.35, 0.8, 1.0))
+    nitro_label.position = Vector2(24, 92)
+    root.add_child(nitro_label)
+
+    cash_label = Label.new()
+    cash_label.text = "$2,500"
+    cash_label.add_theme_font_size_override("font_size", 22)
+    cash_label.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
+    cash_label.position = Vector2(24, 122)
+    root.add_child(cash_label)
+
     mission_label = Label.new()
     mission_label.text = "SPRINT: REACH THE FINISH"
     mission_label.add_theme_font_size_override("font_size", 20)
     mission_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.55))
-    mission_label.position = Vector2(24, 96)
+    mission_label.position = Vector2(24, 154)
     root.add_child(mission_label)
 
     _make_button(root, "◀", Vector2(24, -116), Vector2(104, 92), Vector2(0, 1), "left")
@@ -188,6 +218,7 @@ func _build_hud() -> void:
     _make_button(root, "GAS", Vector2(-132, -116), Vector2(108, 92), Vector2(1, 1), "gas")
     _make_button(root, "BRAKE", Vector2(-252, -116), Vector2(108, 92), Vector2(1, 1), "brake")
     _make_button(root, "PAINT", Vector2(-132, -222), Vector2(108, 72), Vector2(1, 1), "paint")
+    _make_button(root, "NITRO", Vector2(-252, -222), Vector2(108, 72), Vector2(1, 1), "nitro")
 
 func _make_button(parent: Control, caption: String, offset: Vector2, size: Vector2,
         anchor: Vector2, action: String) -> void:
@@ -215,12 +246,14 @@ func _on_control_down(action: String) -> void:
         "right": steer_input = -1.0
         "brake": brake_input = true
         "paint": _change_car_paint()
+        "nitro": nitro_active = true
 
 func _on_control_up(action: String) -> void:
     match action:
         "gas": throttle_input = 0.0
         "left", "right": steer_input = 0.0
         "brake": brake_input = false
+        "nitro": nitro_active = false
 
 
 func _build_traffic() -> void:
@@ -306,11 +339,36 @@ func _update_heat_and_mission(delta: float) -> void:
         for i in range(5):
             stars += "★" if i < wanted_level else "☆"
         heat_label.text = "POLICE HEAT: " + stars
+    if nitro_label:
+        nitro_label.text = "NITRO: %d%%" % int(round(nitro_fuel))
+    if cash_label:
+        cash_label.text = "$%s" % _format_cash(career_cash)
     if not mission_finished and car.position.z < -560.0:
         mission_finished = true
-        mission_label.text = "SPRINT COMPLETE!  WELL DONE"
+        mission_label.text = "SPRINT COMPLETE!  REWARD: $1,500"
+        career_cash += 1500
         speed = 0.0
         throttle_input = 0.0
+
+
+func _check_traffic_collisions(delta: float) -> void:
+    if collision_cooldown > 0.0:
+        return
+    for traffic in traffic_cars:
+        if car.global_position.distance_to(traffic.global_position) < 2.5:
+            speed *= 0.35
+            career_cash = maxi(0, career_cash - 100)
+            collision_cooldown = 1.2
+            break
+
+func _format_cash(value: int) -> String:
+    var raw := str(value)
+    var result := ""
+    for i in range(raw.length()):
+        if i > 0 and (raw.length() - i) % 3 == 0:
+            result += ","
+        result += raw[i]
+    return result
 
 func _change_car_paint() -> void:
     if car_paint == null:

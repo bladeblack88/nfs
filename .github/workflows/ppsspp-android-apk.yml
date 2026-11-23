@@ -31,6 +31,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          accept-android-sdk-licenses: true
 
       - name: Install Android SDK components
         run: |
@@ -45,14 +48,16 @@ jobs:
 
       - name: Verify APK
         run: |
-          APK="ppsspp/android/build/outputs/apk/normal/optimized/android-normal-optimized.apk"
+          find ppsspp/android/build/outputs/apk -type f -name '*.apk' -print
+          APK="$(find ppsspp/android/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          test -n "$APK"
           test -s "$APK"
           ls -lh "$APK"
 
       - name: Upload PPSSPP APK
         uses: actions/upload-artifact@v4
         with:
-          name: PPSSPP-Android-ARM-and-MultiABI
-          path: ppsspp/android/build/outputs/apk/normal/optimized/android-normal-optimized.apk
+          name: PPSSPP-Android-APK
+          path: ppsspp/android/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 14

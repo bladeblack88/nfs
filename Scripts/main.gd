@@ -33,7 +33,7 @@ func _physics_process(delta: float) -> void:
     if brake_input:
         speed = move_toward(speed, 0.0, BRAKE_POWER * delta)
 
-    var steering_scale := clamp(absf(speed) / 12.0, 0.18, 1.0)
+    var steering_scale: float = clampf(absf(speed) / 12.0, 0.18, 1.0)
     car.rotation.y += -steer_input * TURN_RATE * steering_scale * delta * signf(speed if speed != 0.0 else 1.0)
     var forward := -car.global_transform.basis.z
     car.velocity.x = forward.x * speed
@@ -71,8 +71,8 @@ func _build_world() -> void:
     for z in range(-int(ROAD_LENGTH) + 20, 10, 12):
         _add_box("Center dash", Vector3(0, 0.015, z), Vector3(0.18, 0.035, 5.5), Color(0.95, 0.82, 0.38), false)
     for z in range(-int(ROAD_LENGTH) + 30, 0, 35):
-        for side in [-1.0, 1.0]:
-            var x := side * randf_range(17.0, 32.0)
+        for side: float in [-1.0, 1.0]:
+            var x: float = side * randf_range(17.0, 32.0)
             var h := randf_range(7.0, 22.0)
             _add_box("City block", Vector3(x, h * 0.5 - 0.2, z + randf_range(-8.0, 8.0)),
                 Vector3(randf_range(7.0, 13.0), h, randf_range(8.0, 15.0)),

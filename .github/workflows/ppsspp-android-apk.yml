@@ -1,0 +1,58 @@
+name: Build PPSSPP Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ppsspp-android-apk.yml'
+
+jobs:
+  build-ppsspp:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout launcher repository
+        uses: actions/checkout@v4
+
+      - name: Checkout PPSSPP source
+        uses: actions/checkout@v4
+        with:
+          repository: hrydgard/ppsspp
+          ref: master
+          path: ppsspp
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0" "ndk;29.0.14206865" "cmake;3.22.1"
+
+      - name: Build PPSSPP Android optimized APK
+        working-directory: ppsspp
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleNormalOptimized
+
+      - name: Verify APK
+        run: |
+          APK="ppsspp/android/build/outputs/apk/normal/optimized/android-normal-optimized.apk"
+          test -s "$APK"
+          ls -lh "$APK"
+
+      - name: Upload PPSSPP APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PPSSPP-Android-ARM-and-MultiABI
+          path: ppsspp/android/build/outputs/apk/normal/optimized/android-normal-optimized.apk
+          if-no-files-found: error
+          retention-days: 14

@@ -14,12 +14,22 @@ var throttle_input := 0.0
 var brake_input := false
 var camera: Camera3D
 var speed_label: Label
+var heat_label: Label
+var mission_label: Label
+var traffic_cars: Array[Node3D] = []
+var police_cars: Array[Node3D] = []
+var heat_seconds := 0.0
+var wanted_level := 0
+var mission_finished := false
+var car_paint: StandardMaterial3D
 
 func _ready() -> void:
     _build_world()
     _build_car()
     _build_camera()
     _build_hud()
+    _build_traffic()
+    _build_police()
 
 func _physics_process(delta: float) -> void:
     if car == null:
@@ -40,6 +50,9 @@ func _physics_process(delta: float) -> void:
     car.velocity.z = forward.z * speed
     car.velocity.y -= 22.0 * delta
     car.move_and_slide()
+    _update_traffic(delta)
+    _update_police(delta)
+    _update_heat_and_mission(delta)
 
     if speed_label:
         speed_label.text = "%03d KM/H" % int(round(absf(speed) * 3.6))
@@ -89,11 +102,11 @@ func _build_car() -> void:
     mesh.size = Vector3(2.0, 0.65, 4.1)
     body_mesh.mesh = mesh
     body_mesh.position.y = 0.35
-    var paint := StandardMaterial3D.new()
-    paint.albedo_color = Color(0.035, 0.22, 0.68)
-    paint.metallic = 0.72
-    paint.roughness = 0.24
-    body_mesh.material_override = paint
+    car_paint = StandardMaterial3D.new()
+    car_paint.albedo_color = Color(0.035, 0.22, 0.68)
+    car_paint.metallic = 0.72
+    car_paint.roughness = 0.24
+    body_mesh.material_override = car_paint
     car.add_child(body_mesh)
 
     var cabin := MeshInstance3D.new()
@@ -156,10 +169,25 @@ func _build_hud() -> void:
     speed_label.position = Vector2(24, 22)
     root.add_child(speed_label)
 
+    heat_label = Label.new()
+    heat_label.text = "POLICE HEAT: 0"
+    heat_label.add_theme_font_size_override("font_size", 22)
+    heat_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.25))
+    heat_label.position = Vector2(24, 62)
+    root.add_child(heat_label)
+
+    mission_label = Label.new()
+    mission_label.text = "SPRINT: REACH THE FINISH"
+    mission_label.add_theme_font_size_override("font_size", 20)
+    mission_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.55))
+    mission_label.position = Vector2(24, 96)
+    root.add_child(mission_label)
+
     _make_button(root, "◀", Vector2(24, -116), Vector2(104, 92), Vector2(0, 1), "left")
     _make_button(root, "▶", Vector2(140, -116), Vector2(104, 92), Vector2(0, 1), "right")
     _make_button(root, "GAS", Vector2(-132, -116), Vector2(108, 92), Vector2(1, 1), "gas")
     _make_button(root, "BRAKE", Vector2(-252, -116), Vector2(108, 92), Vector2(1, 1), "brake")
+    _make_button(root, "PAINT", Vector2(-132, -222), Vector2(108, 72), Vector2(1, 1), "paint")
 
 func _make_button(parent: Control, caption: String, offset: Vector2, size: Vector2,
         anchor: Vector2, action: String) -> void:
@@ -186,12 +214,110 @@ func _on_control_down(action: String) -> void:
         "left": steer_input = 1.0
         "right": steer_input = -1.0
         "brake": brake_input = true
+        "paint": _change_car_paint()
 
 func _on_control_up(action: String) -> void:
     match action:
         "gas": throttle_input = 0.0
         "left", "right": steer_input = 0.0
         "brake": brake_input = false
+
+
+func _build_traffic() -> void:
+    var colors: Array[Color] = [Color(0.72, 0.16, 0.12), Color(0.78, 0.78, 0.74), Color(0.12, 0.48, 0.28), Color(0.82, 0.55, 0.12)]
+    for i in range(8):
+        var traffic := _create_ai_car("Traffic %d" % i, colors[i % colors.size()], false)
+        traffic.position = Vector3([-4.5, 4.5, -1.5, 1.5][i % 4], 0.55, -45.0 - float(i) * 58.0)
+        traffic_cars.append(traffic)
+
+func _build_police() -> void:
+    for i in range(2):
+        var cop := _create_ai_car("Patrol %d" % i, Color(0.025, 0.045, 0.09), true)
+        cop.position = Vector3(-3.5 if i == 0 else 3.5, 0.55, 18.0 + float(i) * 9.0)
+        police_cars.append(cop)
+
+func _create_ai_car(label: String, color: Color, police: bool) -> Node3D:
+    var root := Node3D.new()
+    root.name = label
+    add_child(root)
+    var body := MeshInstance3D.new()
+    var body_box := BoxMesh.new()
+    body_box.size = Vector3(1.9, 0.65, 3.8)
+    body.mesh = body_box
+    body.position.y = 0.32
+    var material := StandardMaterial3D.new()
+    material.albedo_color = color
+    material.metallic = 0.45
+    body.material_override = material
+    root.add_child(body)
+    var roof := MeshInstance3D.new()
+    var roof_box := BoxMesh.new()
+    roof_box.size = Vector3(1.45, 0.58, 1.7)
+    roof.mesh = roof_box
+    roof.position = Vector3(0, 0.88, -0.1)
+    var glass := StandardMaterial3D.new()
+    glass.albedo_color = Color(0.035, 0.07, 0.11)
+    roof.material_override = glass
+    root.add_child(roof)
+    if police:
+        var lightbar := MeshInstance3D.new()
+        var light_mesh := BoxMesh.new()
+        light_mesh.size = Vector3(0.85, 0.16, 0.28)
+        lightbar.mesh = light_mesh
+        lightbar.position = Vector3(0, 1.22, -0.1)
+        var lights := StandardMaterial3D.new()
+        lights.albedo_color = Color(0.9, 0.04, 0.04)
+        lights.emission_enabled = true
+        lights.emission = Color(0.9, 0.02, 0.02)
+        lightbar.material_override = lights
+        root.add_child(lightbar)
+    return root
+
+func _update_traffic(delta: float) -> void:
+    for traffic in traffic_cars:
+        traffic.position.z -= 12.0 * delta
+        if traffic.position.z > car.position.z + 35.0:
+            traffic.position.z = car.position.z - randf_range(180.0, 420.0)
+            traffic.position.x = [-4.5, 4.5, -1.5, 1.5][randi() % 4]
+
+func _update_police(delta: float) -> void:
+    for cop in police_cars:
+        if wanted_level <= 0:
+            cop.position = car.position + Vector3(0, 0, 24.0 + float(police_cars.find(cop)) * 8.0)
+            cop.rotation.y = car.rotation.y
+            continue
+        var target := car.global_position + car.global_transform.basis.z * 5.0
+        var direction := (target - cop.global_position).normalized()
+        cop.global_position += direction * (15.0 + float(wanted_level) * 2.0) * delta
+        cop.look_at(Vector3(car.global_position.x, cop.global_position.y, car.global_position.z), Vector3.UP)
+        if cop.global_position.distance_to(car.global_position) < 3.4:
+            speed = move_toward(speed, 0.0, 22.0 * delta)
+
+func _update_heat_and_mission(delta: float) -> void:
+    if absf(speed) > 34.0:
+        heat_seconds += delta
+        wanted_level = mini(5, 1 + int(heat_seconds / 7.0))
+    else:
+        heat_seconds = maxf(0.0, heat_seconds - delta * 0.6)
+        if heat_seconds < 1.0:
+            wanted_level = 0
+    if heat_label:
+        var stars := ""
+        for i in range(5):
+            stars += "★" if i < wanted_level else "☆"
+        heat_label.text = "POLICE HEAT: " + stars
+    if not mission_finished and car.position.z < -560.0:
+        mission_finished = true
+        mission_label.text = "SPRINT COMPLETE!  WELL DONE"
+        speed = 0.0
+        throttle_input = 0.0
+
+func _change_car_paint() -> void:
+    if car_paint == null:
+        return
+    var paints: Array[Color] = [Color(0.035, 0.22, 0.68), Color(0.72, 0.035, 0.025), Color(0.04, 0.04, 0.045), Color(0.82, 0.72, 0.12), Color(0.72, 0.72, 0.74)]
+    var current := paints.find(car_paint.albedo_color)
+    car_paint.albedo_color = paints[(current + 1) % paints.size()]
 
 func _add_box(object_name: String, pos: Vector3, dimensions: Vector3,
         color: Color, solid: bool) -> void:

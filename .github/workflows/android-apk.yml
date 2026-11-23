@@ -1,0 +1,32 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'project.godot'
+      - 'Main.tscn'
+      - 'Scripts/**'
+      - 'export_presets.cfg'
+      - '.github/workflows/android-apk.yml'
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.4.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Prepare export directory
+        run: mkdir -p build
+      - name: Export debug APK
+        run: godot --headless --verbose --path . --export-debug "Android" build/MostWantedMobile.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MostWantedMobile-Android-APK
+          path: build/MostWantedMobile.apk
+          if-no-files-found: error
+          retention-days: 14

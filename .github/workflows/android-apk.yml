@@ -28,6 +28,10 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends openjdk-17-jdk unzip curl
+          SDKMANAGER="$(find /usr/lib/android-sdk/cmdline-tools -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" "platforms;android-33" "build-tools;33.0.2"
           mkdir -p "$HOME/.local/share/godot/export_templates/4.4.1.stable"
           curl -L --fail --retry 3 -o /tmp/godot-templates.tpz https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_export_templates.tpz
           unzip -o -j /tmp/godot-templates.tpz 'templates/android_debug.apk' 'templates/android_release.apk' -d "$HOME/.local/share/godot/export_templates/4.4.1.stable"
@@ -39,8 +43,9 @@ jobs:
           export/android/android_sdk_path = "/usr/lib/android-sdk"
           export/android/java_sdk_path = "/usr/lib/jvm/java-17-openjdk-amd64"
           EOF
-          echo "Android SDK contents:"
-          ls -la /usr/lib/android-sdk
+          echo "Installed Android SDK components:"
+          ls -la "$ANDROID_HOME/build-tools"
+          ls -la "$ANDROID_HOME/platforms"
           echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"

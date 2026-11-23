@@ -16,13 +16,33 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: barichello/godot-ci:4.4.1
+    env:
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Prepare export directory
-        run: mkdir -p build
+
+      - name: Install Android export prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends openjdk-17-jdk unzip curl
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.4.1.stable"
+          curl -L --fail --retry 3 -o /tmp/godot-templates.tpz https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_export_templates.tpz
+          unzip -o -j /tmp/godot-templates.tpz 'templates/android_debug.apk' 'templates/android_release.apk' -d "$HOME/.local/share/godot/export_templates/4.4.1.stable"
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=${ANDROID_HOME:-/root/android-sdk}" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=${ANDROID_HOME:-/root/android-sdk}" >> "$GITHUB_ENV"
+
+      - name: Validate project scripts
+        run: godot --headless --editor --path . --quit
+
       - name: Export debug APK
-        run: godot --headless --verbose --path . --export-debug "Android" build/MostWantedMobile.apk
+        run: |
+          mkdir -p build
+          godot --headless --path . --export-debug "Android" build/MostWantedMobile.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
